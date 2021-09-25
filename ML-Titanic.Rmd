@@ -1,0 +1,234 @@
+---
+title: "Titanic-ML"
+Description : " El proyecto consiste en deteminar un modelo que ajuste a los sobrevivientes del titanic según ciertos factores"
+author: "Gabriel Odreman"
+date: "20/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### R Markdown
+## ---------------------------------------------------------------------
+##### Página del Ejemplo  y Data
+###### https://www.europeanvalley.es/noticias/analizamos-el-titanic-con-r/
+###### https://europeanvalley.es/resources/titanic/titanicdf.csv
+
+```{r load_libraries, warning=FALSE, message=FALSE}
+library(tidyverse)
+
+
+```
+#### Analizar el Titanic con Maching Learning de R 
+##### Análisis exploratorio de los datos
+###### Antes de entrenar un modelo predictivo, o incluso antes de realizar cualquier cálculo con un nuevo conjunto de datos, es muy importante realizar una exploración descriptiva de los mismos. Este proceso permite entender mejor que información contiene cada variable, así como detectar posibles errores. Algunos ejemplos frecuentes son:
+###### •	Que una columna se haya almacenado con el tipo incorrecto: una variable numérica está siendo reconocida como texto.
+###### •	Que una variable contenga valores que no tienen sentido: para indicar que no se dispone de la altura de una persona se introduce el valor cero o un espacio en blanco. No existe nadie cuya altura sea cero.
+###### •	Que en una variable de tipo numérico se haya introducido una palabra en lugar de un número.
+
+
+
+
+```{r}
+
+titanicdf <- read.csv("D:/d/2-ESTUDIO/R/MachinLearnig-Ejemplos/titanicdf.csv")
+
+View(titanicdf) # Visualizamos los datos para realizar los análisis iniciales
+colSums(is.na(titanicdf)) # Verificamos las columnas que tienen datos nulos
+
+```
+
+
+#####  Nombre de las Variables
+###### •	PassengerId: identificador único del pasajero.
+###### •	Survived: si el pasajero sobrevivió al naufragio, codificada como 0 (no) y 1 (si). Esta es la variable respuesta que interesa predecir.
+###### •	Pclass: clase a la que pertenecía el pasajero: 1, 2 o 3.
+###### •	Name: nombre del pasajero.
+###### •	Sex: sexo del pasajero.
+###### •	Age: edad del pasajero.
+###### •	SibSp: número de hermanos, hermanas, hermanastros o hermanastras en el barco.
+###### •	Parch: número de padres e hijos en el barco.
+###### •	Ticket: identificador del billete.
+###### •	Fare: precio pagado por el billete.
+###### •	Cabin: identificador del camarote asignado al pasajero.
+###### •	Embarked: puerto en el que embarcó el pasajero. 
+
+#####  Tipo de variables
+###### Una de las primeras comprobaciones que hay que hacer tras cargar los datos, es verificar que cada variable se ha almacenado con el tipo de valor que le corresponde, es decir, que las variables numéricas sean números y las cualitativas factor, character o booleanas. En el lenguaje de programación R, cuando la variable es cualitativa, conviene almacenarla con el tipo factor.
+
+```{r}
+glimpse(titanicdf) # Para visualizar los tipos de variables o la función str()
+```
+
+##### Análisis de las Varibles
+
+```{r}
+data.frame(unclass(summary(titanicdf)), check.names = FALSE, stringsAsFactors = FALSE) # Visualizamos todos los detalle de los datos
+
+```
+
+###### Los valores de Survived podrian cambairse a factor para evitar determinar Min , Max y Medias 
+
+##### Modificación de los Datos.
+
+###### El campo edad tiene muchos valores nulos para ello utilizamos la media de los valores de la edad 29,88. la media es con decimales convertimos todo a entero
+
+```{r}
+titanicdf[is.na(titanicdf$Age), "Age"] <- mean(titanicdf$Age, na.rm=T)
+titanicdf$Age <- as.integer(titanicdf$Age)
+```
+
+###### Valores NUlos
+
+```{r}
+colSums(is.na(titanicdf)) # Para verificar los valores nulos por columnas
+```
+###### Eliminamos las columnas que no necesitamos Cabin y Ticket
+
+```{r}
+titanicdf$Cabin <- NULL
+titanicdf$Ticket <- NULL
+```
+
+###### Como existen pocos nulos Fare podemos eliminar esa linea.
+```{r}
+titanicdf=na.omit(titanicdf)
+```
+
+##### Creacion de variable Dummies
+###### El paquete fastDummies esta diseñado específicamente para convertir variables categóricas en dummies.
+###### https://rpubs.com/jboscomendoza/vairables_dummy_con_r
+
+```{r}
+library(fastDummies)
+```
+###### Podemos crear variables dummy con la función dummy_cols. Damos como argumentos un data frame y el nombre de las columnas que queremos convertir a dummy. Si no damos nombres de columna, convertirá todas las que sean de tipo carácter o factor.
+
+```{r}
+titanicdf <- dummy_cols(titanicdf,  select_columns = c("Sex", "Embarked"))
+```
+###### Esta función nos devuelve un data frame que conserva las variables originales, así que tenemos que usar select para quitarlas, si así lo deseamos. 
+###### Modificamos Sex por Sex_female y Borramos Sex_Male y Sex_Female 
+
+```{r}
+
+titanicdf$Sex <-titanicdf$Sex_female
+titanicdf$Sex_female <- NULL
+titanicdf$Sex_male <- NULL
+titanicdf$Embarked <- NULL
+titanicdf$Embarked_ <- NULL
+```
+
+##### Machine Learning,  Análisis de los Datos según un modelo
+
+###### Una vez que tenemos los datos ya ordenados, tenemos que crear nuestro modelos predictivo.
+###### Para ellos creamos dos tipo de Datos, Train ( para el modelo) y Test (para comparar los datos).
+
+
+```{r}
+train <- titanicdf[1:890, ]  # Valores para aprendizaje del modelo
+test  <- titanicdf[891:1308, ] # Valores para comparar con el modelo.
+
+```
+
+###### El paquete caret, desarrollado por Max Kuhn, es una interfaz que unifica bajo un único marco cientos de funciones de distintos paquetes, facilitando en gran medida todas las etapas de de preprocesado, entrenamiento, optimización y validación de modelos predictivos.
+
+```{r}
+library(caret) # Librería para Modelado de Datos
+```
+
+##### Modelo Sigmoide (graficamos la curva para ejemplificar como vamos a modelar los datos)
+
+```{r}
+sigmoide = function(x){1/(1+exp(-x))}
+x <- seq (-5,5,0.01)
+plot(x,sigmoide(x),col="red")
+```
+
+#####  Crear Modelo
+###### Podemos utilizar diferentes modelos en nuestro caso usamos binomial
+###### Ver referencia "https://rpubs.com/JessicaP/459130"
+
+
+```{r}
+RL_titanic <- glm(Survived~ Pclass + Sex + Age + SibSp + Fare + Embarked_C + Embarked_Q + Embarked_S,data= train, family = binomial)
+
+```
+
+```{r}
+summary(RL_titanic)
+```
+
+###### Los datos de Embarked dan un valor de Pr muy alto por lo cual no son representativos en la evalucíon. Pr debe ser menor a 0.5
+
+##### Evaluamos el Modelo con los datos de Test
+
+```{r}
+predictions <- predict (RL_titanic, test)
+View(predictions)
+
+```
+
+```{r}
+plot (predictions,sigmoide(predictions),col="blue")
+```
+
+###### Las predicciones tienes valores negativos y positivos, los modificamos haciendo que todos aquellos que sean mayores a 0.5 se conviertan en 1 y los que no cumplan serán 0
+
+```{r}
+mod_pred <- ifelse(predictions > 0.5, 1, 0)
+View(mod_pred)
+```
+
+###### Convertimos los valores en factores para compararlos y utilizamos la función confusionMatrix  para comparar los valores.
+
+
+```{r}
+mod_pred <- factor(mod_pred)
+test$Survived <- factor(test$Survived)
+confusionMatrix(mod_pred, test$Survived)
+
+```
+
+###### Al comparar los valores tenemos de los Pasajeros con valor 0 que son los que no sobrevivieron, concuerdan con el test en 261 y hay 32 que no. De los valores con 1 concuerdan 120 y 5 que no. Hay una representatividad del 91.15 %
+
+#####  Modelo de Árbol de Decisión 
+
+```{r}
+library(rpart)
+library(rpart.plot)
+
+```
+
+```{r}
+tree_titanic <- rpart(Survived~ Pclass + Sex + Age + SibSp + Fare + Embarked_C + Embarked_Q + Embarked_S,data= train)
+pred_tree <- predict(tree_titanic,test)
+View(pred_tree)
+
+```
+
+```{r}
+pred_tree <- ifelse(pred_tree > 0.5,1,0)
+rpart.plot(tree_titanic)
+
+```
+         
+###### Los  datos Embarked no son relevantes para los análisis.
+
+```{r}
+pred_tree <- factor(pred_tree)
+test$Survived <- factor(test$Survived)
+confusionMatrix(pred_tree,test$Survived)
+```
+
+## ---------------------------------------------------------------------------
+##### Conclusiones.
+###### El modelo de Arbol nos da una certidumbre de 97.13 % , para lograr una mejor aproximación se podrian probar con otros modelos y evaluar sólo los parametro significativos.
+```{r}
+write.table(pred_tree, file="titanicRes.csv")
+```
+
+
